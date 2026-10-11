@@ -67,19 +67,19 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 **Что делается:** `db/schema.sql` (6 таблиц из REQUIREMENTS 3.3 с проверками полей по типу операции), `storage/db.py` (подключение, применение схемы, понятные ошибки). Схема применяется автоматически при запуске приложения и безопасна для повторного запуска. Версии библиотек в `requirements.txt` закреплены; `docker-compose.yml` без `.env` сразу пишет подсказку.
 
 **Проверка:**
-- [ ] В GitHub Desktop: Fetch origin → Pull origin. Затем `pip install -r requirements.txt` (поставит закреплённые версии).
-- [ ] `streamlit run app.py` → зелёная плашка «База подключена · таблиц: 6».
-- [ ] `docker compose exec db psql -U portfolio_app -d portfolio -c "\dt"` показывает `accounts`, `operations`, `quotes`, `securities`, `settings`, `target_allocation`.
-- [ ] `docker compose stop` → обновить страницу (F5) → понятная ошибка «База данных не отвечает…», а не стена красного текста. Затем `docker compose start` → F5 → снова «База подключена».
-- [ ] Остановить приложение (Ctrl+C) и запустить снова → ошибок нет, таблиц по-прежнему 6.
+- [x] В GitHub Desktop: Fetch origin → Pull origin. Затем `pip install -r requirements.txt` (поставит закреплённые версии).
+- [x] `streamlit run app.py` → зелёная плашка «База подключена · таблиц: 6».
+- [x] `docker compose exec db psql -U portfolio_app -d portfolio -c "\dt"` показывает `accounts`, `operations`, `quotes`, `securities`, `settings`, `target_allocation`.
+- [x] `docker compose stop` → обновить страницу (F5) → понятная ошибка «База данных не отвечает…», а не стена красного текста. Затем `docker compose start` → F5 → снова «База подключена».
+- [x] Остановить приложение (Ctrl+C) и запустить снова → ошибок нет, таблиц по-прежнему 6.
 
 ### 1.3. Модели и расчёт позиций + тесты
-**Промпт:** базовый + «Реализуй `core/models.py` и расчёт позиций со средней ценой в `core/calculations.py` по правилам REQUIREMENTS 3.4. Только чистые функции, без БД. Напиши тесты pytest на сценарии из US-2 и на продажу больше, чем есть».
+**Что делается:** `core/models.py` (операция, позиция), `core/calculations.py` (расчёт позиций и средней цены), `core/validation.py` (нельзя продать больше, чем есть), `tests/test_calculations.py` (11 тестов). Только чистые функции, без базы и интерфейса. Позиции считаются по каждому счёту отдельно, затем складываются.
 
 **Проверка:**
-- [ ] `pytest` — все тесты зелёные.
+- [ ] В GitHub Desktop: Fetch origin → Pull origin.
+- [ ] `pytest` → `11 passed`.
 - [ ] Попросить ИИ: «Объясни простыми словами, как работает calculations.py» и убедиться, что логика понятна.
-- [ ] Коммит: «Расчёт позиций».
 
 ### 1.4. Хранилище
 **Промпт:** базовый + «Реализуй интерфейс `Repository` и `PostgresRepository` для счетов и операций: добавить, изменить, удалить, получить список. Плюс фасад `portfolio_service` с методами для UI. Сделай тест сервиса с заглушкой Repository в памяти».
