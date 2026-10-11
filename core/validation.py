@@ -1,4 +1,4 @@
-"""Проверка операции перед сохранением.
+"""Проверка операции перед сохранением, правкой и удалением.
 
 Сейчас здесь одно правило: нельзя продать больше, чем есть на счёте.
 Проверки обязательных полей формы появятся на шаге 1.5.
@@ -27,4 +27,19 @@ def check_can_save(existing: list[Operation], new: Operation) -> None:
         ) from error
 
 
-__all__ = ["OversellError", "check_can_save"]
+def check_can_delete(remaining: list[Operation], deleted: Operation) -> None:
+    """Выбрасывает OversellError, если без удаляемой операции не хватит бумаг.
+
+    Пример: удаляем покупку 10 шт., а позже была продажа 8 шт. — продавать
+    станет нечего, поэтому удаление запрещено.
+    """
+    try:
+        calculate_account_positions(remaining)
+    except OversellError as error:
+        raise OversellError(
+            f"Нельзя удалить операцию: без неё не хватит бумаг для более поздней продажи. {error}",
+            operation=deleted,
+        ) from error
+
+
+__all__ = ["OversellError", "check_can_delete", "check_can_save"]

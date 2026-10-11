@@ -22,6 +22,16 @@ class OpType(str, Enum):
 
 
 @dataclass(frozen=True)
+class Account:
+    """Брокерский счёт или ИИС — строка таблицы accounts."""
+
+    id: int
+    name: str
+    broker: str
+    account_type: str = "broker"  # "broker" или "iis"
+
+
+@dataclass(frozen=True)
 class Operation:
     """Одна операция на счёте — строка таблицы operations.
 
