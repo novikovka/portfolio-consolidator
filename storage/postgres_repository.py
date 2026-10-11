@@ -6,7 +6,7 @@
 
 from dataclasses import replace
 
-from core.models import Account, Operation, OpType
+from core.models import Account, Instrument, Operation, OpType, Quote
 from storage.db import connect
 
 # Порядок колонок, в котором читаем операции из базы
@@ -40,6 +40,67 @@ class PostgresRepository:
             conn.execute(
                 "INSERT INTO securities (ticker) VALUES (%s) ON CONFLICT (ticker) DO NOTHING",
                 (ticker,),
+            )
+
+    def list_securities(self) -> list[Instrument]:
+        with connect() as conn:
+            rows = conn.execute(
+                "SELECT ticker, name, isin, board, asset_class FROM securities ORDER BY ticker"
+            ).fetchall()
+        return [Instrument(ticker=r[0], name=r[1], isin=r[2], board=r[3], asset_class=r[4]) for r in rows]
+
+    def update_security(self, instrument: Instrument) -> None:
+        with connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO securities (ticker, name, isin, board, asset_class)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (ticker) DO UPDATE
+                SET name = EXCLUDED.name, isin = EXCLUDED.isin,
+                    board = EXCLUDED.board, asset_class = EXCLUDED.asset_class
+                """,
+                (instrument.ticker, instrument.name, instrument.isin, instrument.board, instrument.asset_class),
+            )
+
+    # --- Цены -------------------------------------------------------------
+
+    def save_quotes(self, quotes: list[Quote]) -> None:
+        with connect() as conn:
+            for q in quotes:
+                conn.execute(
+                    "INSERT INTO quotes (ticker, quote_time, price) VALUES (%s, %s, %s) "
+                    "ON CONFLICT (ticker, quote_time) DO NOTHING",
+                    (q.ticker, q.time, q.price),
+                )
+
+    def latest_quotes(self, tickers: list[str]) -> dict[str, Quote]:
+        if not tickers:
+            return {}
+        with connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT ON (ticker) ticker, quote_time, price
+                FROM quotes WHERE ticker = ANY(%s)
+                ORDER BY ticker, quote_time DESC
+                """,
+                (list(tickers),),
+            ).fetchall()
+        # Время биржи — московское; храним и показываем как есть, без часовых поясов
+        return {r[0]: Quote(ticker=r[0], time=r[1].replace(tzinfo=None), price=r[2]) for r in rows}
+
+    # --- Настройки --------------------------------------------------------
+
+    def get_setting(self, key: str) -> str | None:
+        with connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = %s", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        with connect() as conn:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (%s, %s) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                (key, value),
             )
 
     # --- Операции ---------------------------------------------------------

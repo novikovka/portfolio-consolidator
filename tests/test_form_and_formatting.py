@@ -8,7 +8,7 @@ import pytest
 from core.calculations import cash_flow
 from core.models import Operation, OpType
 from core.validation import validate_fields
-from ui.formatting import fmt_money, fmt_price, fmt_qty, fmt_signed_money, parse_decimal
+from ui.formatting import fmt_money, fmt_pct, fmt_price, fmt_qty, fmt_signed_money, fmt_signed_pct, parse_decimal, plural
 from ui.operation_form import build_trade
 
 NOW = datetime(2026, 10, 11, 18, 0)
@@ -58,6 +58,16 @@ def test_formatting_uses_russian_style():
     assert fmt_price(Decimal("250")) == "250,00"
     assert fmt_price(Decimal("6.4215")) == "6,4215"
     assert fmt_price(Decimal("275.025")) == "275,025"
+
+
+def test_percent_and_plural():
+    assert fmt_pct(Decimal("24.096"), 1) == f"24,1{NBSP}%"
+    assert fmt_signed_pct(Decimal("12.2205")) == f"+12,22{NBSP}%"
+    assert fmt_signed_pct(Decimal("-4.934")) == f"−4,93{NBSP}%"
+    assert [plural(n, "счёт", "счёта", "счетов") for n in (1, 2, 5, 11, 21, 22, 112)] == [
+        f"1{NBSP}счёт", f"2{NBSP}счёта", f"5{NBSP}счетов", f"11{NBSP}счетов",
+        f"21{NBSP}счёт", f"22{NBSP}счёта", f"112{NBSP}счетов",
+    ]
 
 
 # --- Сумма сделки -----------------------------------------------------------

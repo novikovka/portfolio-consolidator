@@ -12,7 +12,7 @@
 
 ## Стек
 
-Python · Streamlit · PostgreSQL (psycopg) · pandas · Plotly · MOEX ISS API · pytest
+Python · Streamlit · PostgreSQL (psycopg) · pandas · requests · MOEX ISS API · pytest
 Разработка: Windows 10. Сервер: Raspberry Pi 5.
 
 ## Этапы

@@ -5,3 +5,4 @@ psycopg[binary]==3.3.6     # подключение к PostgreSQL
 python-dotenv==1.2.4       # чтение настроек из .env
 pandas==2.3.3              # таблицы позиций и операций
 pytest==9.1.1              # тесты
+requests==2.34.2           # запросы к Мосбирже (MOEX ISS)
