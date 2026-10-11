@@ -26,12 +26,23 @@ Python · Streamlit · PostgreSQL (psycopg) · pandas · Plotly · MOEX ISS API 
 | 4 | Структура и цели | Диаграммы, отклонения от цели — **MVP** |
 | 5 | Raspberry Pi 5 | Приложение доступно с телефона 24/7 |
 
-## Запуск (после этапа 1)
+## Запуск
 
+Нужны Python 3.11+ и запущенный Docker Desktop.
+
+**Первый раз:**
 ```powershell
+copy .env.example .env          # вписать свой пароль вместо change_me
+docker compose up -d            # поднять базу PostgreSQL
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env   # вписать пароль от БД
+streamlit run app.py            # откроется http://localhost:8501
+```
+
+**В следующие разы:**
+```powershell
+.venv\Scripts\Activate.ps1
 streamlit run app.py
 ```
+База запускается сама вместе с Docker Desktop. Проверить: `docker compose ps`.
