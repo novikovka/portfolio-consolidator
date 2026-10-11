@@ -1,11 +1,40 @@
 """Проверка операции перед сохранением, правкой и удалением.
 
-Сейчас здесь одно правило: нельзя продать больше, чем есть на счёте.
-Проверки обязательных полей формы появятся на шаге 1.5.
+Два вида проверок:
+- validate_fields — поля самой операции (REQUIREMENTS 3.6);
+- check_can_save / check_can_delete — не уйдёт ли количество бумаг «в минус».
 """
 
+from datetime import datetime
+
 from core.calculations import OversellError, calculate_account_positions
-from core.models import Operation
+from core.models import Operation, OpType
+
+MAX_NOTE_LENGTH = 1000
+
+
+def validate_fields(op: Operation, now: datetime) -> list[str]:
+    """Проверяет поля операции. Возвращает список понятных ошибок (пустой — всё в порядке)."""
+    errors: list[str] = []
+
+    if op.op_type in (OpType.BUY, OpType.SELL):
+        if not op.ticker:
+            errors.append("Укажите тикер бумаги, например SBER.")
+        errors += _positive(op.quantity, "Укажите количество.", "Количество должно быть больше 0.")
+        errors += _positive(op.price, "Укажите цену.", "Цена должна быть больше 0.")
+    else:
+        if op.op_type in (OpType.DIVIDEND, OpType.COUPON) and not op.ticker:
+            errors.append("Укажите тикер бумаги, по которой пришла выплата.")
+        errors += _positive(op.amount, "Укажите сумму.", "Сумма должна быть больше 0.")
+
+    if op.fee is None or op.fee < 0:
+        errors.append("Комиссия не может быть отрицательной.")
+    if op.op_datetime > now:
+        errors.append("Дата и время сделки не могут быть в будущем.")
+    if op.note and len(op.note) > MAX_NOTE_LENGTH:
+        errors.append(f"Заметка длиннее {MAX_NOTE_LENGTH} символов.")
+
+    return errors
 
 
 def check_can_save(existing: list[Operation], new: Operation) -> None:
@@ -42,4 +71,13 @@ def check_can_delete(remaining: list[Operation], deleted: Operation) -> None:
         ) from error
 
 
-__all__ = ["OversellError", "check_can_delete", "check_can_save"]
+def _positive(value, if_missing: str, if_not_positive: str) -> list[str]:
+    """Ошибка, если значение не заполнено или не больше нуля."""
+    if value is None:
+        return [if_missing]
+    if value <= 0:
+        return [if_not_positive]
+    return []
+
+
+__all__ = ["MAX_NOTE_LENGTH", "OversellError", "check_can_delete", "check_can_save", "validate_fields"]

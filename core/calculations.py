@@ -93,6 +93,21 @@ def calculate_positions(operations: list[Operation], account_id: int | None = No
     ]
 
 
+def cash_flow(op: Operation) -> Decimal:
+    """Сколько денег операция добавила (+) или забрала (−) со счёта.
+
+    Покупка: −(количество × цена + комиссия). Продажа: +(количество × цена − комиссия).
+    Пополнение, дивиденд, купон: +сумма. Вывод: −сумма.
+    """
+    if op.op_type == OpType.BUY:
+        return -(op.quantity * op.price + op.fee)
+    if op.op_type == OpType.SELL:
+        return op.quantity * op.price - op.fee
+    if op.op_type == OpType.WITHDRAW:
+        return -op.amount
+    return op.amount  # пополнение, дивиденд, купон
+
+
 def _in_time_order(operations: list[Operation]) -> list[Operation]:
     """Сортирует по дате и времени; при совпадении — по номеру в базе."""
     return sorted(operations, key=lambda op: (op.op_datetime, op.id or 0))
