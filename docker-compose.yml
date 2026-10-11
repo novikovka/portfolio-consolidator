@@ -4,7 +4,8 @@
 # Остановка:  docker compose stop
 #
 # Имя базы, пользователь, пароль и порт берутся из файла .env
-# (Docker Compose читает его автоматически).
+# (Docker Compose читает его автоматически). Если .env нет,
+# Docker сразу остановится с подсказкой, а не уйдёт в перезапуски.
 
 services:
   db:
@@ -12,11 +13,11 @@ services:
     container_name: portfolio-db
     restart: unless-stopped        # сама поднимается после перезагрузки компьютера
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: "${DB_NAME:?not set - create .env with: copy .env.example .env}"
+      POSTGRES_USER: "${DB_USER:?not set - create .env with: copy .env.example .env}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?not set - create .env with: copy .env.example .env}"
     ports:
-      - "${DB_PORT}:5432"          # база доступна приложению на localhost
+      - "${DB_PORT:-5432}:5432"    # база доступна приложению на localhost
     volumes:
       - pgdata:/var/lib/postgresql/data   # данные живут в томе и не пропадают
     healthcheck:                   # Docker сам проверяет, что база готова

@@ -56,20 +56,22 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 **Что делается:** `docker-compose.yml` (PostgreSQL 17), `.env.example`, `.gitignore`, `requirements.txt`, `config.py`, `app.py` с заголовком «Мой портфель». Папки модулей появляются на тех шагах, где в них впервые нужен код.
 
 **Проверка** (терминал VS Code, папка проекта):
-- [ ] `copy .env.example .env` → в `.env` вписан свой пароль вместо `change_me`.
-- [ ] `docker compose up -d` → `docker compose ps`: контейнер `portfolio-db` в статусе `running (healthy)`.
-- [ ] `python -m venv .venv` → `.venv\Scripts\Activate.ps1` → `pip install -r requirements.txt` прошли без ошибок.
-- [ ] `streamlit run app.py` открывает в браузере страницу «Мой портфель».
-- [ ] В GitHub Desktop файл `.env` **не появляется** в списке изменений.
-- [ ] `pip freeze > freeze.txt` → прислать ИИ, чтобы зафиксировать точные версии библиотек.
+- [x] `copy .env.example .env` → в `.env` вписан свой пароль вместо `change_me`.
+- [x] `docker compose up -d` → `docker compose ps`: контейнер `portfolio-db` в статусе `running (healthy)`.
+- [x] `python -m venv .venv` → `.venv\Scripts\Activate.ps1` → `pip install -r requirements.txt` прошли без ошибок.
+- [x] `streamlit run app.py` открывает в браузере страницу «Мой портфель».
+- [x] В GitHub Desktop файл `.env` **не появляется** в списке изменений.
+- [x] `pip freeze > freeze.txt` → прислать ИИ, чтобы зафиксировать точные версии библиотек.
 
 ### 1.2. Схема базы и подключение
-**Промпт:** базовый + «Напиши `db/schema.sql` по модели данных из REQUIREMENTS 3.3 и способ применить его к базе. Добавь на страницу проверку подключения к БД».
+**Что делается:** `db/schema.sql` (6 таблиц из REQUIREMENTS 3.3 с проверками полей по типу операции), `storage/db.py` (подключение, применение схемы, понятные ошибки). Схема применяется автоматически при запуске приложения и безопасна для повторного запуска. Версии библиотек в `requirements.txt` закреплены; `docker-compose.yml` без `.env` сразу пишет подсказку.
 
 **Проверка:**
-- [ ] `docker compose exec db psql -U portfolio_app -d portfolio -c "\dt"` показывает таблицы `accounts`, `securities`, `operations`, `quotes`, `target_allocation`, `settings`.
-- [ ] На странице написано «База подключена». Если в `.env` указать неверный пароль, появляется понятная ошибка, а не стена красного текста.
-- [ ] Коммит: «Схема БД».
+- [ ] В GitHub Desktop: Fetch origin → Pull origin. Затем `pip install -r requirements.txt` (поставит закреплённые версии).
+- [ ] `streamlit run app.py` → зелёная плашка «База подключена · таблиц: 6».
+- [ ] `docker compose exec db psql -U portfolio_app -d portfolio -c "\dt"` показывает `accounts`, `operations`, `quotes`, `securities`, `settings`, `target_allocation`.
+- [ ] `docker compose stop` → обновить страницу (F5) → понятная ошибка «База данных не отвечает…», а не стена красного текста. Затем `docker compose start` → F5 → снова «База подключена».
+- [ ] Остановить приложение (Ctrl+C) и запустить снова → ошибок нет, таблиц по-прежнему 6.
 
 ### 1.3. Модели и расчёт позиций + тесты
 **Промпт:** базовый + «Реализуй `core/models.py` и расчёт позиций со средней ценой в `core/calculations.py` по правилам REQUIREMENTS 3.4. Только чистые функции, без БД. Напиши тесты pytest на сценарии из US-2 и на продажу больше, чем есть».
