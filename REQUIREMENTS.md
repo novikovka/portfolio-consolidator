@@ -108,7 +108,7 @@
 |---|---|---|
 | Язык | Python 3.11+ | На Windows ставим 3.12 с python.org |
 | Интерфейс | Streamlit | Веб-интерфейс на Python, порт 8501 |
-| База данных | PostgreSQL 15+ | Windows: установщик EDB; Pi: `apt` |
+| База данных | PostgreSQL 17 в Docker | `docker-compose.yml`, одинаково на Windows и на Pi |
 | Драйвер БД | psycopg 3 (`psycopg[binary]`) | Чистый SQL, без ORM |
 | Схема БД | `db/schema.sql` | Изменения схемы — файлы `db/migrations/NNN_*.sql` |
 | Данные | pandas | Таблицы позиций и журнала |
@@ -272,6 +272,7 @@ portfolio-consolidator/
 ├── PLAN.md
 ├── RULES.md
 ├── requirements.txt
+├── docker-compose.yml    ← PostgreSQL 17 в Docker
 ├── .env.example          ← образец настроек без паролей
 ├── .gitignore
 ├── app.py                ← streamlit run app.py

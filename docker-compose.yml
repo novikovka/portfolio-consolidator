@@ -1,0 +1,29 @@
+# База данных PostgreSQL для приложения.
+# Запуск:     docker compose up -d
+# Состояние:  docker compose ps
+# Остановка:  docker compose stop
+#
+# Имя базы, пользователь, пароль и порт берутся из файла .env
+# (Docker Compose читает его автоматически).
+
+services:
+  db:
+    image: postgres:17
+    container_name: portfolio-db
+    restart: unless-stopped        # сама поднимается после перезагрузки компьютера
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"          # база доступна приложению на localhost
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # данные живут в томе и не пропадают
+    healthcheck:                   # Docker сам проверяет, что база готова
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

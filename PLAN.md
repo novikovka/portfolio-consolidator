@@ -18,61 +18,56 @@
 
 ## Этап 0. Подготовка (Windows 10) · ~1 вечер
 
-### 0.1. Установить инструменты
-- [ ] **Python 3.12** с python.org. В первом окне установщика поставить галочку **«Add python.exe to PATH»**.
-- [ ] **Git for Windows** с git-scm.com (все настройки по умолчанию).
-- [ ] **PostgreSQL** (последняя стабильная версия) с postgresql.org → Download → Windows (установщик EDB). Порт оставить 5432, **пароль пользователя `postgres` записать**. pgAdmin оставить, Stack Builder можно пропустить.
-- [ ] **Редактор:** Cursor или VS Code.
+**Инструменты:** Python, VS Code (с расширением Python), Docker Desktop (в нём работает PostgreSQL), GitHub Desktop (коммиты и синхронизация с GitHub).
 
-**Проверка.** В PowerShell должно выполниться:
-```
-python --version
-git --version
-```
-Должен открыться pgAdmin и подключиться к серверу с записанным паролем.
+### 0.1. Python
+- [x] `python --version` показывает 3.11 или новее. Если нет — поставить с python.org с галочкой **«Add python.exe to PATH»**.
+- [x] `pip --version` работает.
 
-### 0.2. Настроить Git и GitHub
-- [ ] Зарегистрироваться на github.com (если ещё нет).
-- [ ] Создать репозиторий `portfolio-consolidator`. Можно публичный: личные данные туда не попадут благодаря `.gitignore`.
-- [ ] В PowerShell:
-```
-git config --global user.name "Имя Фамилия"
-git config --global user.email "почта@от.github"
-```
-- [ ] Клонировать репозиторий в удобную папку, положить туда `README.md`, `REQUIREMENTS.md`, `PLAN.md`, `RULES.md` и закоммитить: «Спецификация проекта».
-
-**Проверка:** на github.com в репозитории видны 4 файла.
-
-### 0.3. Разрешить виртуальные окружения в PowerShell
-По умолчанию Windows не даёт активировать окружение Python. Один раз выполни:
+### 0.2. Разрешить виртуальные окружения в PowerShell
+- [x] Один раз выполнить и ответить `Y`:
 ```
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-### 0.4. Создать базу данных
-- [ ] В pgAdmin создать пользователя (Login/Group Role) `portfolio_app` с паролем и правом входа (Can login).
-- [ ] Создать базу `portfolio`, владелец — `portfolio_app`.
+### 0.3. Docker и образ PostgreSQL
+- [x] Docker Desktop запущен, внизу слева статус «Engine running».
+- [x] Если Docker Hub не отвечает (`TLS handshake timeout`): Settings → Docker Engine → добавить `"registry-mirrors": ["https://mirror.gcr.io"],` → Apply & restart.
+- [x] `docker run hello-world` выводит «Hello from Docker!».
+- [x] `docker pull postgres:17` заканчивается строкой `Downloaded newer image`.
+- [ ] Settings → General → «Start Docker Desktop when you sign in».
 
-**Проверка:** в pgAdmin видна база `portfolio`.
+Саму базу создавать вручную не нужно: её поднимет `docker compose` на шаге 1.1.
+
+### 0.4. VS Code
+- [ ] Установить расширение **Python** от Microsoft (`Ctrl+Shift+X`).
+
+### 0.5. GitHub
+- [x] Репозиторий `portfolio-consolidator` создан, в нём 4 файла спецификации.
+- [x] Аккаунт GitHub связан с Claude; приложение Claude установлено на репозиторий.
+
+**Как забирать изменения от ИИ:** на GitHub открыть Pull Request → **Merge pull request** → в GitHub Desktop **Fetch origin / Pull origin**.
 
 ---
 
 ## Этап 1. Операции и позиции · US-1, US-2, US-3
 
-### 1.1. Каркас проекта
-**Промпт:** базовый + «Создай каркас проекта по структуре из REQUIREMENTS 3.8: папки, пустые модули, `requirements.txt`, `.gitignore`, `.env.example`, `config.py`, и `app.py`, который показывает заголовок "Мой портфель". Объясни, как создать виртуальное окружение на Windows и запустить приложение».
+### 1.1. Каркас проекта и база в Docker
+**Что делается:** `docker-compose.yml` (PostgreSQL 17), `.env.example`, `.gitignore`, `requirements.txt`, `config.py`, `app.py` с заголовком «Мой портфель». Папки модулей появляются на тех шагах, где в них впервые нужен код.
 
-**Проверка:**
+**Проверка** (терминал VS Code, папка проекта):
+- [ ] `copy .env.example .env` → в `.env` вписан свой пароль вместо `change_me`.
+- [ ] `docker compose up -d` → `docker compose ps`: контейнер `portfolio-db` в статусе `running (healthy)`.
 - [ ] `python -m venv .venv` → `.venv\Scripts\Activate.ps1` → `pip install -r requirements.txt` прошли без ошибок.
-- [ ] `streamlit run app.py` открывает в браузере страницу с заголовком.
-- [ ] `.env` скопирован из `.env.example`, в нём мой пароль от `portfolio_app`; `git status` **не показывает** `.env`.
-- [ ] Коммит: «Каркас проекта».
+- [ ] `streamlit run app.py` открывает в браузере страницу «Мой портфель».
+- [ ] В GitHub Desktop файл `.env` **не появляется** в списке изменений.
+- [ ] `pip freeze > freeze.txt` → прислать ИИ, чтобы зафиксировать точные версии библиотек.
 
 ### 1.2. Схема базы и подключение
 **Промпт:** базовый + «Напиши `db/schema.sql` по модели данных из REQUIREMENTS 3.3 и способ применить его к базе. Добавь на страницу проверку подключения к БД».
 
 **Проверка:**
-- [ ] В pgAdmin в базе `portfolio` появились таблицы `accounts`, `securities`, `operations`, `quotes`, `target_allocation`, `settings`.
+- [ ] `docker compose exec db psql -U portfolio_app -d portfolio -c "\dt"` показывает таблицы `accounts`, `securities`, `operations`, `quotes`, `target_allocation`, `settings`.
 - [ ] На странице написано «База подключена». Если в `.env` указать неверный пароль, появляется понятная ошибка, а не стена красного текста.
 - [ ] Коммит: «Схема БД».
 
@@ -206,15 +201,15 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 **Проверка:** в PowerShell `ssh пользователь@portfolio-pi.local` пускает внутрь.
 
-### 5.2. Установить PostgreSQL, Python и приложение
-**Промпт:** базовый + «Мы на Raspberry Pi OS Lite 64-bit. Дай пошаговые команды: установить PostgreSQL и python3-venv через apt, создать пользователя и базу как на Windows, склонировать репозиторий, создать окружение, установить зависимости, применить schema.sql. Объясняй каждую команду».
+### 5.2. Установить Docker, Python и приложение
+**Промпт:** базовый + «Мы на Raspberry Pi OS Lite 64-bit. Дай пошаговые команды: установить Docker (с зеркалом mirror.gcr.io) и python3-venv, склонировать репозиторий, создать `.env`, поднять базу через `docker compose up -d`, создать окружение, установить зависимости, применить schema.sql. Объясняй каждую команду».
 
 **Проверка:**
 - [ ] `streamlit run app.py` на Pi → с ноутбука открывается `http://portfolio-pi.local:8501`.
 - [ ] Коммит изменений, если они были.
 
 ### 5.3. Перенести данные с ноутбука
-**Промпт:** базовый + «Как перенести базу portfolio с Windows на Pi через pg_dump/pg_restore?»
+**Промпт:** базовый + «Как перенести базу portfolio из Docker на Windows в Docker на Pi через pg_dump/pg_restore (`docker compose exec db ...`)?»
 
 **Проверка:** на Pi видны все мои операции и счета.
 
