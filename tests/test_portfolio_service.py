@@ -161,6 +161,25 @@ def test_unknown_operation_cannot_be_changed_or_deleted(service):
         service.update_operation(replace(trade(OpType.BUY, 1, 1, 1), id=999))
 
 
+# 11
+def test_preview_shows_position_before_and_after(service, repo):
+    """Блок «После сохранения»: 10 по 250 → после покупки 10 по 300 станет 20 по 275. Ничего не сохраняется."""
+    before, after = service.preview_position(trade(OpType.BUY, 10, 250, 1))
+    assert before is None  # бумаги ещё не было
+    assert (after.quantity, after.avg_price) == (10, 250)
+
+    service.add_operation(trade(OpType.BUY, 10, 250, 1))
+    before, after = service.preview_position(trade(OpType.BUY, 10, 300, 2, ticker="sber"))
+    assert (before.quantity, before.avg_price) == (10, 250)
+    assert (after.quantity, after.avg_price) == (20, 275)
+    assert len(repo.operations) == 1
+
+    before, after = service.preview_position(trade(OpType.SELL, 10, 300, 3))
+    assert after is None  # позиция закроется полностью
+    with pytest.raises(OversellError):
+        service.preview_position(trade(OpType.SELL, 11, 300, 3))
+
+
 # 10
 def test_journal_is_newest_first_and_filters_by_account(service):
     """Журнал: новые операции сверху; можно показать только один счёт."""

@@ -81,6 +81,19 @@ class PortfolioService:
         """Позиции по всем счетам (account_id=None) или по одному счёту."""
         return calculate_positions(self._repo.list_operations(), account_id=account_id)
 
+    def preview_position(self, operation: Operation) -> tuple[Position | None, Position | None]:
+        """Позиция по бумаге на счёте до и после новой операции — для блока «После сохранения».
+
+        None означает «позиции нет». Ничего не сохраняет. Если операция приведёт
+        к продаже «в минус», выбрасывает OversellError.
+        """
+        operation = _normalize(operation)
+        existing = self._repo.list_operations()
+        check_can_save(existing, operation)
+        before = calculate_positions(existing, account_id=operation.account_id)
+        after = calculate_positions([*existing, operation], account_id=operation.account_id)
+        return _position_of(before, operation.ticker), _position_of(after, operation.ticker)
+
     # --- Вспомогательное --------------------------------------------------
 
     def _others(self, operation_id: int | None) -> list[Operation]:
@@ -99,6 +112,10 @@ def _normalize(operation: Operation) -> Operation:
     if operation.ticker is None:
         return operation
     return replace(operation, ticker=operation.ticker.strip().upper())
+
+
+def _position_of(positions: list[Position], ticker: str | None) -> Position | None:
+    return next((p for p in positions if p.ticker == ticker), None)
 
 
 def _find(operations: list[Operation], operation_id: int | None) -> Operation:
