@@ -1,6 +1,7 @@
 # Библиотеки проекта. Установка: pip install -r requirements.txt
-streamlit>=1.40,<2          # веб-интерфейс на Python
-psycopg[binary]>=3.2,<4     # подключение к PostgreSQL
-python-dotenv>=1.0,<2       # чтение настроек из .env
-pandas>=2.2,<3              # таблицы позиций и операций
-pytest>=8.0                 # тесты
+# Версии зафиксированы по рабочей установке (Windows 10, Python 3.11).
+streamlit==1.65.0          # веб-интерфейс на Python
+psycopg[binary]==3.3.6     # подключение к PostgreSQL
+python-dotenv==1.2.4       # чтение настроек из .env
+pandas==2.3.3              # таблицы позиций и операций
+pytest==9.1.1              # тесты
