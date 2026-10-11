@@ -52,6 +52,26 @@ class Operation:
 
 
 @dataclass(frozen=True)
+class Instrument:
+    """Ценная бумага из справочника: тикер, название, режим торгов, класс актива."""
+
+    ticker: str
+    name: str | None = None         # короткое название: «Сбербанк»
+    isin: str | None = None
+    board: str | None = None        # режим торгов MOEX: TQBR (акции), TQTF (фонды)
+    asset_class: str | None = None  # "share", "etf", "bond"
+
+
+@dataclass(frozen=True)
+class Quote:
+    """Цена бумаги на бирже в определённый момент (московское время)."""
+
+    ticker: str
+    price: Decimal
+    time: datetime
+
+
+@dataclass(frozen=True)
 class Position:
     """Сколько бумаги есть и во что она обошлась.
 

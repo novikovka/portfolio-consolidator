@@ -1,0 +1,19 @@
+# Внешний вид приложения — цвета и скругления из макетов.
+# Streamlit читает этот файл сам при запуске `streamlit run app.py`.
+
+[theme]
+base = "light"
+primaryColor = "#2A5BD7"              # синие кнопки, выделение, переключатели
+backgroundColor = "#FFFFFF"           # фон страницы
+secondaryBackgroundColor = "#F4F5F7"  # поля ввода, меню слева
+textColor = "#1C2230"                 # основной текст
+linkColor = "#2A5BD7"
+borderColor = "#E3E6EB"
+baseRadius = "0.5rem"                 # скругление углов, как в макетах
+font = "sans-serif"                   # Source Sans — тот же шрифт, что в макетах
+
+[client]
+toolbarMode = "minimal"               # убирает кнопку Deploy справа сверху
+
+[browser]
+gatherUsageStats = false              # не отправлять статистику использования в Streamlit

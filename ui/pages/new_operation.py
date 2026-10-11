@@ -1,7 +1,9 @@
 """Страница «Новая операция»: форма покупки или продажи.
 
-На этапе 1 — только покупка и продажа, тикер вводится вручную.
-Пополнения, выводы, дивиденды и купоны — этап 3; подсказки тикеров с MOEX — этап 2.
+Тикер выбирается из списка акций и фондов Мосбиржи (поиск по тикеру и названию);
+рядом — текущая цена и кнопка «Подставить текущую». Если бумаги нет в списке
+или биржа недоступна — тикер можно ввести вручную.
+Пополнения, выводы, дивиденды и купоны — этап 3.
 
 Поля стоят вне st.form, чтобы сумма сделки и блок «После сохранения»
 пересчитывались сразу при вводе.
@@ -13,13 +15,18 @@ import streamlit as st
 
 from core.calculations import OversellError, cash_flow
 from core.models import OpType
-from ui.app_state import get_service, set_flash, show_flash
-from ui.formatting import OP_TYPE_LABELS, fmt_money, fmt_price, fmt_qty
+from ui.app_state import get_service, load_instruments, quote_for, set_flash, show_flash
+from ui.formatting import OP_TYPE_LABELS, fmt_input, fmt_money, fmt_price, fmt_qty
 from ui.operation_form import build_trade
 from ui.pages_registry import OPERATIONS
 
 TYPES = {"Покупка": OpType.BUY, "Продажа": OpType.SELL}
-CLEARED_FIELDS = {"nf_ticker": "", "nf_qty": "", "nf_price": "", "nf_fee": "0", "nf_note": ""}
+CLEARED_FIELDS = {"nf_ticker_text": "", "nf_qty": "", "nf_price": "", "nf_fee": "0", "nf_note": ""}
+
+
+def put_current_price(price) -> None:
+    """Кнопка «Подставить текущую»: записывает цену в поле до его отрисовки."""
+    st.session_state["nf_price"] = fmt_input(price)
 
 service = get_service()
 default_account = service.get_default_account()
@@ -35,6 +42,7 @@ st.session_state.setdefault("nf_time", datetime.now().time().replace(second=0, m
 if st.session_state.pop("nf_clear", False):
     for key, value in CLEARED_FIELDS.items():
         st.session_state[key] = value
+    st.session_state.pop("nf_ticker", None)  # выпадающий список бумаг — снова пустой
 
 show_flash()
 
@@ -56,10 +64,35 @@ with form_col:
     trade_date = c2.date_input("Дата сделки", format="DD.MM.YYYY", max_value=date.today(), key="nf_date")
     trade_time = c3.time_input("Время", step=60, key="nf_time")
 
-    ticker = st.text_input(
-        "Тикер", key="nf_ticker", placeholder="Например, SBER",
-        help="Пока тикер вводится вручную. Подсказки с Мосбиржи появятся на этапе 2.",
-    )
+    # --- Бумага: список Мосбиржи или ручной ввод ---
+    instruments = {i.ticker: i for i in load_instruments()}
+    manual = not instruments or st.session_state.get("nf_manual", False)
+    if manual:
+        ticker = st.text_input("Тикер", key="nf_ticker_text", placeholder="Например, SBER")
+        if not instruments:
+            st.caption("Список бумаг с Мосбиржи сейчас недоступен — введите тикер вручную.")
+    else:
+        ticker = st.selectbox(
+            "Бумага", list(instruments), key="nf_ticker", index=None,
+            format_func=lambda t: f"{t} — {instruments[t].name}" if instruments[t].name else t,
+            placeholder="Начните вводить тикер или название, например «сбер»",
+        ) or ""
+    if instruments:
+        st.toggle("Нет в списке — ввести тикер вручную", key="nf_manual")
+
+    # Текущая цена выбранной бумаги
+    instrument = instruments.get(ticker.strip().upper()) if ticker else None
+    quote = quote_for(instrument) if instrument else None
+    if instrument:
+        info, button = st.columns([3, 1], vertical_alignment="center")
+        if quote:
+            info.caption(
+                f":green[✓] {instrument.name} · текущая цена **{fmt_price(quote.price)} ₽** "
+                f"(MOEX, {quote.time:%d.%m %H:%M} мск)"
+            )
+            button.button("Подставить текущую", on_click=put_current_price, args=(quote.price,), key="nf_put_price")
+        else:
+            info.caption(f":green[✓] {instrument.name} · цена сейчас недоступна")
 
     c4, c5, c6 = st.columns(3)
     quantity_text = c4.text_input("Количество, шт.", key="nf_qty", placeholder="10")

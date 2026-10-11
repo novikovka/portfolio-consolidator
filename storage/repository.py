@@ -7,7 +7,7 @@
 
 from typing import Protocol
 
-from core.models import Account, Operation
+from core.models import Account, Instrument, Operation, Quote
 
 
 class Repository(Protocol):
@@ -23,6 +23,26 @@ class Repository(Protocol):
     # Справочник бумаг
     def ensure_security(self, ticker: str) -> None:
         """Добавляет тикер в справочник, если его там ещё нет."""
+
+    def list_securities(self) -> list[Instrument]:
+        """Все бумаги справочника (у части могут быть не заполнены название и режим торгов)."""
+
+    def update_security(self, instrument: Instrument) -> None:
+        """Записывает название, ISIN, режим торгов и класс актива для тикера."""
+
+    # Цены
+    def save_quotes(self, quotes: list[Quote]) -> None:
+        """Сохраняет цены в кэш. Повтор той же цены на то же время не дублируется."""
+
+    def latest_quotes(self, tickers: list[str]) -> dict[str, Quote]:
+        """Последняя сохранённая цена по каждому тикеру."""
+
+    # Настройки
+    def get_setting(self, key: str) -> str | None:
+        """Значение настройки или None."""
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Сохраняет настройку."""
 
     # Операции
     def list_operations(self) -> list[Operation]:

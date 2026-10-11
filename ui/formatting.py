@@ -79,3 +79,25 @@ def fmt_input(value: Decimal | None) -> str:
 def fmt_datetime(value: datetime) -> str:
     """Дата и время сделки: «07.10.2026 11:42»."""
     return value.strftime("%d.%m.%Y %H:%M")
+
+
+def fmt_pct(value: Decimal, digits: int = 2) -> str:
+    """Процент: «24,1 %»."""
+    return f"{fmt_money(value, digits)}{NBSP}%"
+
+
+def fmt_signed_pct(value: Decimal) -> str:
+    """Процент со знаком: «+12,22 %» / «−4,93 %»."""
+    sign = "+" if value > 0 else ("−" if value < 0 else "")
+    return f"{sign}{fmt_money(abs(value))}{NBSP}%"
+
+
+def plural(n: int, one: str, few: str, many: str) -> str:
+    """Число со словом в нужной форме: 1 счёт, 2 счёта, 5 счетов, 21 счёт, 11 счетов."""
+    if n % 10 == 1 and n % 100 != 11:
+        word = one
+    elif 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        word = few
+    else:
+        word = many
+    return f"{n}{NBSP}{word}"

@@ -1,7 +1,7 @@
 """Тесты фасада PortfolioService. Запуск: pytest
 
-Вместо PostgreSQL используется InMemoryRepository — хранилище в памяти
-с тем же набором методов. Поэтому тесты быстрые и не трогают настоящую базу.
+Вместо PostgreSQL используется InMemoryRepository (tests/fakes.py) — хранилище
+в памяти с тем же набором методов. Поэтому тесты быстрые и не трогают настоящую базу.
 """
 
 from dataclasses import replace
@@ -10,49 +10,14 @@ from decimal import Decimal
 
 import pytest
 
-from core.models import Account, Operation, OpType
+from core.models import Operation, OpType
+from fakes import InMemoryRepository
 from services.portfolio_service import (
     DEFAULT_ACCOUNT_NAME,
     OperationNotFound,
     OversellError,
     PortfolioService,
 )
-
-
-class InMemoryRepository:
-    """Хранилище в памяти: реализует те же методы, что PostgresRepository."""
-
-    def __init__(self):
-        self.accounts: list[Account] = []
-        self.securities: set[str] = set()
-        self.operations: dict[int, Operation] = {}
-        self._next_id = 1
-
-    def list_accounts(self):
-        return list(self.accounts)
-
-    def add_account(self, name, broker, account_type="broker"):
-        account = Account(id=len(self.accounts) + 1, name=name, broker=broker, account_type=account_type)
-        self.accounts.append(account)
-        return account
-
-    def ensure_security(self, ticker):
-        self.securities.add(ticker)
-
-    def list_operations(self):
-        return list(self.operations.values())
-
-    def add_operation(self, operation):
-        saved = replace(operation, id=self._next_id)
-        self.operations[saved.id] = saved
-        self._next_id += 1
-        return saved
-
-    def update_operation(self, operation):
-        self.operations[operation.id] = operation
-
-    def delete_operation(self, operation_id):
-        del self.operations[operation_id]
 
 
 @pytest.fixture
