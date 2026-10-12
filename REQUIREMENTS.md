@@ -135,7 +135,8 @@ ui/ (Streamlit)  →  services/portfolio_service.py (фасад)
 | Модуль | Ответственность | Может зависеть от |
 |---|---|---|
 | `core/models.py` | Сущности (dataclass) | — |
-| `core/calculations.py` | Позиции, средняя цена, доходность, структура, отклонения | `models` |
+| `core/calculations.py` | Позиции, средняя цена, сумма операции, деньги на счёте | `models` |
+| `core/valuation.py` | Стоимость и доходность по текущим ценам, облигации, НКД | `models` |
 | `core/validation.py` | Проверка операции перед сохранением (обязательные поля, остаток при продаже) | `models`, `calculations` |
 | `storage/repository.py` | Интерфейс хранилища (Protocol) | `models` |
 | `storage/postgres_repository.py` | Реализация на psycopg | `repository` |
@@ -181,12 +182,13 @@ ui/ (Streamlit)  →  services/portfolio_service.py (фасад)
 | account_id | INTEGER | FK → accounts, NOT NULL |
 | op_datetime | TIMESTAMP | NOT NULL, дата и время сделки (по умолчанию — сейчас) |
 | op_type | TEXT | `buy` / `sell` / `deposit` / `withdraw` / `dividend` / `coupon` |
+| face_value | NUMERIC(18,2) | номинал облигации на дату сделки; NULL — не облигация |
 | ticker | TEXT | FK → securities; NULL для deposit/withdraw |
 | quantity | NUMERIC(18,6) | > 0 для buy/sell |
 | price | NUMERIC(18,6) | за 1 шт.; для облигаций в % номинала |
 | fee | NUMERIC(18,2) | DEFAULT 0, ≥ 0 |
 | amount | NUMERIC(18,2) | сумма денег для денежных операций, дивидендов и купонов |
-| accrued_interest | NUMERIC(18,2) | НКД, только облигации |
+| accrued_interest | NUMERIC(18,2) | НКД за всю сделку, ₽, только облигации |
 | note | TEXT | заметка, до 1000 символов |
 | created_at | TIMESTAMPTZ | DEFAULT now() |
 | updated_at | TIMESTAMPTZ | время последнего изменения |
@@ -196,7 +198,8 @@ ui/ (Streamlit)  →  services/portfolio_service.py (фасад)
 |---|---|---|
 | ticker | TEXT | FK → securities |
 | quote_time | TIMESTAMPTZ | |
-| price | NUMERIC(18,6) | |
+| price | NUMERIC(18,6) | облигации — % от номинала |
+| accrued_interest | NUMERIC(18,2) | НКД на одну облигацию |
 | | | PK (ticker, quote_time) |
 
 **target_allocation** — целевая структура
@@ -213,6 +216,8 @@ ui/ (Streamlit)  →  services/portfolio_service.py (фасад)
 - **Вложено в позицию** = количество × средняя цена.
 - **Стоимость позиции:** для акций и фондов = количество × текущая цена; для облигаций = количество × номинал × цена% / 100.
 - **Доходность позиции** = стоимость − вложено; в % = доходность / вложено × 100.
+- **Деньги на счёте** = сумма всех операций со знаком: пополнения, продажи (+НКД), дивиденды, купоны — плюс; выводы, покупки (+комиссия, +НКД) — минус. Может быть отрицательной, если пополнения не вносились — тогда показывается подсказка.
+- **НКД** в стоимость позиции и её доходность не входит (его компенсирует ближайший купон), учитывается только в деньгах.
 - **Доходность портфеля** = стоимость бумаг + деньги на счетах + выведено − внесено.
 - **Отклонение класса** = фактическая доля − целевая (п.п.).
 - **Сумма ребалансировки класса** = целевая доля × стоимость портфеля − текущая стоимость класса.

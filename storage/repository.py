@@ -20,6 +20,12 @@ class Repository(Protocol):
     def add_account(self, name: str, broker: str, account_type: str = "broker") -> Account:
         """Создаёт счёт и возвращает его с присвоенным номером."""
 
+    def update_account(self, account: Account) -> None:
+        """Переименовывает счёт / меняет брокера и тип."""
+
+    def delete_account(self, account_id: int) -> None:
+        """Удаляет счёт (фасад разрешает это только для счёта без операций)."""
+
     # Справочник бумаг
     def ensure_security(self, ticker: str) -> None:
         """Добавляет тикер в справочник, если его там ещё нет."""

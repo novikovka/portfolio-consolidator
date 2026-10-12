@@ -8,10 +8,12 @@
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Callable
 
-from core.calculations import calculate_positions
-from core.models import Account, Instrument, Operation, Position, Quote
+from core.calculations import calculate_positions, cash_balance
+from core.calculations import cash_flow
+from core.models import Account, Instrument, Operation, OpType, Position, Quote
 from core.validation import OversellError, check_can_delete, check_can_save
 from core.valuation import PortfolioTotals, PositionValue, portfolio_totals, value_positions
 from market.price_provider import MarketDataError, PriceProvider
@@ -37,6 +39,27 @@ class PortfolioView:
     totals: PortfolioTotals
     fetched_at: datetime | None  # когда последний раз получали цены с биржи
     warning: str | None          # например, «нет связи с Мосбиржей»
+    cash: Decimal = Decimal("0")  # деньги на счёте/счетах; может быть < 0, если пополнения не вносились
+
+    @property
+    def total_value(self) -> Decimal:
+        """Стоимость бумаг + деньги."""
+        return self.totals.value + self.cash
+
+
+@dataclass(frozen=True)
+class AccountSummary:
+    """Строка страницы «Счета»."""
+
+    account: Account
+    operations: int
+    securities: int
+    value: Decimal   # стоимость бумаг по последним сохранённым ценам
+    cash: Decimal
+
+
+class AccountError(ValueError):
+    """Нельзя создать, изменить или удалить счёт. Текст — понятное объяснение."""
 
 
 class OperationNotFound(LookupError):
@@ -68,6 +91,54 @@ class PortfolioService:
             return accounts[0]
         return self._repo.add_account(DEFAULT_ACCOUNT_NAME, DEFAULT_ACCOUNT_BROKER)
 
+    def add_account(self, name: str, broker: str, account_type: str = "broker") -> Account:
+        """Новый счёт. Название обязательно и не повторяется."""
+        name, broker = self._check_account(name, broker, account_type)
+        return self._repo.add_account(name, broker, account_type)
+
+    def update_account(self, account: Account) -> None:
+        """Переименовать счёт, сменить брокера или тип."""
+        name, broker = self._check_account(account.name, account.broker, account.account_type, account.id)
+        self._repo.update_account(replace(account, name=name, broker=broker))
+
+    def delete_account(self, account_id: int) -> None:
+        """Удалить счёт — только пустой (без операций) и не последний."""
+        if any(op.account_id == account_id for op in self._repo.list_operations()):
+            raise AccountError("Удалить можно только пустой счёт: сначала удалите или перенесите его операции.")
+        if len(self._repo.list_accounts()) <= 1:
+            raise AccountError("Нельзя удалить единственный счёт.")
+        self._repo.delete_account(account_id)
+
+    def account_summaries(self) -> list[AccountSummary]:
+        """Счета со стоимостью бумаг, деньгами и числом операций (по сохранённым ценам)."""
+        operations = self._repo.list_operations()
+        instruments = {s.ticker: s for s in self._repo.list_securities()}
+        result = []
+        for account in self._repo.list_accounts():
+            own = [op for op in operations if op.account_id == account.id]
+            positions = calculate_positions(own)
+            values = value_positions(positions, self._repo.latest_quotes([p.ticker for p in positions]), instruments)
+            result.append(AccountSummary(
+                account=account,
+                operations=len(own),
+                securities=len(positions),
+                value=portfolio_totals(values).value,
+                cash=cash_balance(own),
+            ))
+        return result
+
+    def _check_account(self, name: str, broker: str, account_type: str, account_id: int | None = None):
+        name, broker = (name or "").strip(), (broker or "").strip()
+        if not name:
+            raise AccountError("Укажите название счёта.")
+        if not broker:
+            raise AccountError("Укажите брокера.")
+        if account_type not in ("broker", "iis"):
+            raise AccountError("Тип счёта — брокерский или ИИС.")
+        if any(a.name.lower() == name.lower() and a.id != account_id for a in self._repo.list_accounts()):
+            raise AccountError(f"Счёт «{name}» уже есть — выберите другое название.")
+        return name, broker
+
     # --- Операции ---------------------------------------------------------
 
     def list_operations(self, account_id: int | None = None) -> list[Operation]:
@@ -83,14 +154,14 @@ class PortfolioService:
         Если операция приведёт к продаже «в минус», выбрасывает OversellError
         и ничего не сохраняет.
         """
-        operation = _normalize(operation)
+        operation = self._with_face_value(_normalize(operation))
         check_can_save(self._repo.list_operations(), operation)
         self._register_security(operation)
         return self._repo.add_operation(operation)
 
     def update_operation(self, operation: Operation) -> None:
         """Проверяет и сохраняет изменённую операцию (по operation.id)."""
-        operation = _normalize(operation)
+        operation = self._with_face_value(_normalize(operation))
         others = self._others(operation.id)
         check_can_save(others, operation)
         self._register_security(operation)
@@ -116,12 +187,21 @@ class PortfolioService:
         None означает «позиции нет». Ничего не сохраняет. Если операция приведёт
         к продаже «в минус», выбрасывает OversellError.
         """
-        operation = _normalize(operation)
+        operation = self._with_face_value(_normalize(operation))
         existing = self._repo.list_operations()
         check_can_save(existing, operation)
         before = calculate_positions(existing, account_id=operation.account_id)
         after = calculate_positions([*existing, operation], account_id=operation.account_id)
         return _position_of(before, operation.ticker), _position_of(after, operation.ticker)
+
+    def preview_cash(self, operation: Operation) -> tuple[Decimal, Decimal]:
+        """Деньги на счёте до и после новой операции — для блока «После сохранения»."""
+        operation = self._with_face_value(_normalize(operation))
+        before = cash_balance(self._repo.list_operations(), account_id=operation.account_id)
+        return before, before + cash_flow(operation)
+
+    def get_cash(self, account_id: int | None = None) -> Decimal:
+        return cash_balance(self._repo.list_operations(), account_id=account_id)
 
     # --- Цены и оценка портфеля -----------------------------------------
 
@@ -143,11 +223,15 @@ class PortfolioService:
                 self._repo.set_setting(QUOTES_FAILED_AT_KEY, self._now().isoformat(timespec="seconds"))
                 warning = str(error)
 
-        values = value_positions(positions, self._repo.latest_quotes(tickers))
+        instruments = {s.ticker: s for s in self._repo.list_securities()}
+        values = value_positions(positions, self._repo.latest_quotes(tickers), instruments)
         without_price = [v.position.ticker for v in values if v.price is None]
         if without_price and warning is None:
             warning = "Нет цены для: " + ", ".join(without_price) + ". Эти бумаги не входят в стоимость портфеля."
-        return PortfolioView(values, portfolio_totals(values), self._fetched_at(), warning)
+        return PortfolioView(
+            values, portfolio_totals(values), self._fetched_at(), warning,
+            cash=cash_balance(self._repo.list_operations(), account_id=account_id),
+        )
 
     def refresh_prices(self, tickers: list[str]) -> None:
         """Запрашивает цены с биржи и сохраняет их. Ошибка сети → MarketDataError."""
@@ -215,6 +299,17 @@ class PortfolioService:
         _find(all_operations, operation_id)
         return [op for op in all_operations if op.id != operation_id]
 
+    def _with_face_value(self, operation: Operation) -> Operation:
+        """Для облигации подставляет номинал из справочника, если он не указан."""
+        if operation.face_value is not None or not operation.ticker:
+            return operation
+        if operation.op_type not in (OpType.BUY, OpType.SELL):
+            return operation
+        security = next((s for s in self._repo.list_securities() if s.ticker == operation.ticker), None)
+        if security and security.is_bond and security.face_value:
+            return replace(operation, face_value=security.face_value)
+        return operation
+
     def _register_security(self, operation: Operation) -> None:
         if operation.ticker:
             self._repo.ensure_security(operation.ticker)
@@ -238,4 +333,7 @@ def _find(operations: list[Operation], operation_id: int | None) -> Operation:
     raise OperationNotFound(f"Операция №{operation_id} не найдена — возможно, её уже удалили.")
 
 
-__all__ = ["MarketDataError", "OperationNotFound", "OversellError", "PortfolioService", "PortfolioView"]
+__all__ = [
+    "AccountError", "AccountSummary", "MarketDataError", "OperationNotFound",
+    "OversellError", "PortfolioService", "PortfolioView",
+]

@@ -29,6 +29,8 @@ def validate_fields(op: Operation, now: datetime) -> list[str]:
 
     if op.fee is None or op.fee < 0:
         errors.append("Комиссия не может быть отрицательной.")
+    if op.accrued_interest is not None and op.accrued_interest < 0:
+        errors.append("НКД не может быть отрицательным.")
     if op.op_datetime > now:
         errors.append("Дата и время сделки не могут быть в будущем.")
     if op.note and len(op.note) > MAX_NOTE_LENGTH:

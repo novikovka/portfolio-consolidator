@@ -12,57 +12,67 @@ from core.models import Operation, OpType
 from services.portfolio_service import OperationNotFound
 from ui.app_state import get_service, set_flash, show_flash
 from ui.formatting import (
-    OP_TYPE_LABELS, fmt_datetime, fmt_input, fmt_money, fmt_price, fmt_qty, fmt_signed_money,
+    OP_TYPE_LABELS, fmt_bond_pct, fmt_datetime, fmt_input, fmt_money, fmt_price, fmt_qty, fmt_signed_money,
 )
-from ui.operation_form import build_trade
+from ui.operation_form import TICKER_TYPES, TRADE_TYPES, build_operation
 from ui.pages_registry import NEW_OPERATION
-
-TRADE_TYPES = {"Покупка": OpType.BUY, "Продажа": OpType.SELL}
 
 service = get_service()
 accounts = service.list_accounts()
 account_names = {a.id: a.name for a in accounts}
 
 
+def price_label(op: Operation) -> str:
+    """Цена для журнала: облигации — в % от номинала, остальное — в рублях."""
+    return fmt_bond_pct(op.price) if op.is_bond else f"{fmt_price(op.price)} ₽"
+
+
 def describe(op: Operation) -> str:
     """Короткое описание операции для окон подтверждения."""
     parts = [OP_TYPE_LABELS[op.op_type], op.ticker or ""]
     if op.quantity is not None:
-        parts.append(f"{fmt_qty(op.quantity)} шт. по {fmt_price(op.price)} ₽")
+        parts.append(f"{fmt_qty(op.quantity)} шт. по {price_label(op)}")
+    elif op.amount is not None:
+        parts.append(f"{fmt_money(op.amount)} ₽")
     parts.append(fmt_datetime(op.op_datetime))
     return " · ".join(p for p in parts if p)
 
 
 @st.dialog("Изменить операцию")
 def edit_dialog(op: Operation) -> None:
-    if op.op_type not in (OpType.BUY, OpType.SELL):
-        st.info("Правка этого типа операции появится на этапе 3.")
-        return
+    """Правка операции. Тип не меняется — чтобы сменить тип, удалите операцию и внесите заново."""
+    is_trade = op.op_type in TRADE_TYPES
     with st.form("edit_operation"):
-        type_label = st.radio(
-            "Тип операции", list(TRADE_TYPES),
-            index=list(TRADE_TYPES.values()).index(op.op_type), horizontal=True,
-        )
+        st.caption(f"Тип: **{OP_TYPE_LABELS[op.op_type]}**")
         account = st.selectbox(
             "Счёт", accounts, format_func=lambda a: a.name,
             index=next(i for i, a in enumerate(accounts) if a.id == op.account_id),
         )
         c1, c2 = st.columns(2)
-        trade_date = c1.date_input("Дата сделки", value=op.op_datetime.date(), format="DD.MM.YYYY")
+        trade_date = c1.date_input("Дата", value=op.op_datetime.date(), format="DD.MM.YYYY")
         trade_time = c2.time_input("Время", value=op.op_datetime.time(), step=60)
-        ticker = st.text_input("Тикер", value=op.ticker or "")
-        c3, c4, c5 = st.columns(3)
-        quantity_text = c3.text_input("Количество, шт.", value=fmt_input(op.quantity))
-        price_text = c4.text_input("Цена за 1 шт., ₽", value=fmt_input(op.price))
-        fee_text = c5.text_input("Комиссия, ₽", value=fmt_input(op.fee))
+        ticker = st.text_input("Тикер", value=op.ticker or "") if op.op_type in TICKER_TYPES else ""
+        quantity_text = price_text = fee_text = accrued_text = amount_text = ""
+        if is_trade:
+            c3, c4, c5 = st.columns(3)
+            quantity_text = c3.text_input("Количество, шт.", value=fmt_input(op.quantity))
+            price_text = c4.text_input(
+                "Цена, % от номинала" if op.is_bond else "Цена за 1 шт., ₽", value=fmt_input(op.price),
+            )
+            fee_text = c5.text_input("Комиссия, ₽", value=fmt_input(op.fee))
+            if op.is_bond:
+                accrued_text = st.text_input("НКД за всю сделку, ₽", value=fmt_input(op.accrued_interest))
+        else:
+            amount_text = st.text_input("Сумма, ₽", value=fmt_input(op.amount))
         note = st.text_area("Заметка", value=op.note or "", max_chars=1000, height=80)
         submitted = st.form_submit_button("Сохранить изменения", type="primary")
 
     if submitted:
-        updated, errors = build_trade(
-            account_id=account.id, op_type=TRADE_TYPES[type_label], trade_date=trade_date,
-            trade_time=trade_time, ticker=ticker, quantity_text=quantity_text,
-            price_text=price_text, fee_text=fee_text, note=note, operation_id=op.id,
+        updated, errors = build_operation(
+            account_id=account.id, op_type=op.op_type, trade_date=trade_date, trade_time=trade_time,
+            ticker=ticker, quantity_text=quantity_text, price_text=price_text, fee_text=fee_text,
+            amount_text=amount_text, accrued_text=accrued_text, face_value=op.face_value,
+            note=note, operation_id=op.id,
         )
         for message in errors:
             st.error(message, icon=":material/error:")
@@ -136,8 +146,9 @@ table = pd.DataFrame(
             "Тип": OP_TYPE_LABELS[op.op_type],
             "Бумага": op.ticker or "—",
             "Кол-во": fmt_qty(op.quantity) if op.quantity is not None else "—",
-            "Цена, ₽": fmt_price(op.price) if op.price is not None else "—",
-            "Комиссия, ₽": fmt_money(op.fee) if op.op_type in (OpType.BUY, OpType.SELL) else "—",
+            "Цена": price_label(op) if op.price is not None else "—",
+            "Комиссия, ₽": fmt_money(op.fee) if op.op_type in TRADE_TYPES else "—",
+            "НКД, ₽": fmt_money(op.accrued_interest) if op.accrued_interest else "—",
             "Сумма, ₽": fmt_signed_money(cash_flow(op)),
             "Заметка": op.note or "",
         }

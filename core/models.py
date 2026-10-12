@@ -49,6 +49,23 @@ class Operation:
     amount: Decimal | None = None
     note: str | None = None
     id: int | None = None  # None — операция ещё не сохранена в базе
+    face_value: Decimal | None = None        # номинал облигации на дату сделки; None — не облигация
+    accrued_interest: Decimal | None = None  # НКД за всю сделку, ₽ (только облигации)
+
+    @property
+    def is_bond(self) -> bool:
+        return self.face_value is not None
+
+    @property
+    def trade_amount(self) -> Decimal:
+        """Сумма сделки без комиссии и НКД.
+
+        Акции и фонды: количество × цена. Облигации: цена в % от номинала,
+        поэтому количество × номинал × цена / 100 (10 ОФЗ по 95 % → 9 500 ₽).
+        """
+        if self.is_bond:
+            return self.quantity * self.face_value * self.price / 100
+        return self.quantity * self.price
 
 
 @dataclass(frozen=True)
@@ -58,8 +75,13 @@ class Instrument:
     ticker: str
     name: str | None = None         # короткое название: «Сбербанк»
     isin: str | None = None
-    board: str | None = None        # режим торгов MOEX: TQBR (акции), TQTF (фонды)
+    board: str | None = None        # режим торгов MOEX: TQBR (акции), TQTF (фонды), TQOB/TQCB (облигации)
     asset_class: str | None = None  # "share", "etf", "bond"
+    face_value: Decimal | None = None  # номинал облигации, ₽
+
+    @property
+    def is_bond(self) -> bool:
+        return self.asset_class == "bond"
 
 
 @dataclass(frozen=True)
@@ -67,8 +89,9 @@ class Quote:
     """Цена бумаги на бирже в определённый момент (московское время)."""
 
     ticker: str
-    price: Decimal
+    price: Decimal          # акции и фонды — ₽ за штуку; облигации — % от номинала
     time: datetime
+    accrued_interest: Decimal | None = None  # НКД на одну облигацию сейчас, ₽
 
 
 @dataclass(frozen=True)

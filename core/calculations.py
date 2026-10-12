@@ -1,8 +1,10 @@
 """Расчёт позиций по операциям.
 
 Правила (REQUIREMENTS.md, 3.4):
-- Покупка: количество растёт, в стоимость добавляется количество × цена + комиссия.
-  Средняя цена = стоимость / количество.
+- Покупка: количество растёт, в стоимость добавляется сумма сделки + комиссия.
+  Сумма сделки: акции и фонды — количество × цена; облигации — количество × номинал × цена% / 100.
+  НКД в стоимость не входит (его вернёт ближайший купон), он учитывается только в деньгах.
+  Средняя цена = стоимость / количество (₽ за штуку).
 - Продажа: количество уменьшается, стоимость уменьшается пропорционально,
   поэтому средняя цена НЕ меняется.
 - Продала всё — позиция исчезает; следующая покупка считается с нуля.
@@ -47,7 +49,7 @@ def calculate_account_positions(operations: list[Operation]) -> dict[tuple[int, 
 
         if op.op_type == OpType.BUY:
             quantity[key] += op.quantity
-            cost[key] += op.quantity * op.price + op.fee
+            cost[key] += op.trade_amount + op.fee
             continue
 
         # Продажа
@@ -96,16 +98,29 @@ def calculate_positions(operations: list[Operation], account_id: int | None = No
 def cash_flow(op: Operation) -> Decimal:
     """Сколько денег операция добавила (+) или забрала (−) со счёта.
 
-    Покупка: −(количество × цена + комиссия). Продажа: +(количество × цена − комиссия).
+    Покупка: −(сумма сделки + комиссия + НКД). Продажа: +(сумма сделки − комиссия + НКД).
     Пополнение, дивиденд, купон: +сумма. Вывод: −сумма.
     """
+    accrued = op.accrued_interest or ZERO
     if op.op_type == OpType.BUY:
-        return -(op.quantity * op.price + op.fee)
+        return -(op.trade_amount + op.fee + accrued)
     if op.op_type == OpType.SELL:
-        return op.quantity * op.price - op.fee
+        return op.trade_amount - op.fee + accrued
     if op.op_type == OpType.WITHDRAW:
         return -op.amount
     return op.amount  # пополнение, дивиденд, купон
+
+
+def cash_balance(operations: list[Operation], account_id: int | None = None) -> Decimal:
+    """Деньги на счёте (или на всех счетах): сумма всех поступлений и списаний.
+
+    Может быть отрицательной, если пополнения не вносились — это нормально,
+    приложение покажет подсказку (REQUIREMENTS, US-7).
+    """
+    return sum(
+        (cash_flow(op) for op in operations if account_id is None or op.account_id == account_id),
+        ZERO,
+    )
 
 
 def _in_time_order(operations: list[Operation]) -> list[Operation]:
