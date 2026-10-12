@@ -26,9 +26,16 @@ class InMemoryRepository:
         return list(self.accounts)
 
     def add_account(self, name, broker, account_type="broker"):
-        account = Account(id=len(self.accounts) + 1, name=name, broker=broker, account_type=account_type)
+        account = Account(id=max((a.id for a in self.accounts), default=0) + 1,
+                          name=name, broker=broker, account_type=account_type)
         self.accounts.append(account)
         return account
+
+    def update_account(self, account):
+        self.accounts = [account if a.id == account.id else a for a in self.accounts]
+
+    def delete_account(self, account_id):
+        self.accounts = [a for a in self.accounts if a.id != account_id]
 
     # Справочник
     def ensure_security(self, ticker):
@@ -82,6 +89,7 @@ class FakeMarket:
     def __init__(self, instruments=(), prices=None, quote_time=None):
         self.instruments = list(instruments)
         self.prices = dict(prices or {})  # тикер → Decimal
+        self.accrued = {}                 # тикер → НКД на одну облигацию
         self.quote_time = quote_time
         self.offline = False
         self.quote_requests: list[dict] = []
@@ -98,6 +106,7 @@ class FakeMarket:
         if self.offline:
             raise MarketDataError("Нет связи с Мосбиржей. Показаны последние сохранённые цены.")
         return {
-            t: Quote(ticker=t, price=self.prices[t], time=self.quote_time)
+            t: Quote(ticker=t, price=self.prices[t], time=self.quote_time,
+                     accrued_interest=self.accrued.get(t))
             for tickers in tickers_by_board.values() for t in tickers if t in self.prices
         }

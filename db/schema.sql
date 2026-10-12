@@ -106,3 +106,15 @@ CREATE TABLE IF NOT EXISTS settings (
 INSERT INTO settings (key, value) VALUES
     ('deviation_threshold_pp', '5')                     -- порог предупреждения, п.п.
 ON CONFLICT (key) DO NOTHING;
+
+
+-- Изменения схемы (этап 3) ---------------------------------------------------
+-- ADD COLUMN IF NOT EXISTS: у кого база уже создана, колонки добавятся,
+-- данные не пропадут; повторный запуск ничего не меняет.
+
+-- Номинал облигации на дату сделки (цена облигации — в % от номинала)
+ALTER TABLE operations ADD COLUMN IF NOT EXISTS face_value NUMERIC(18, 2)
+    CHECK (face_value > 0);
+
+-- НКД на одну облигацию в момент цены
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS accrued_interest NUMERIC(18, 2);

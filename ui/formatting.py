@@ -69,6 +69,17 @@ def fmt_price(value: Decimal) -> str:
     return fmt_money(value, digits)
 
 
+def fmt_avg_price(value: Decimal) -> str:
+    """Средняя цена для таблиц: 2 знака (340,22), для дешёвых бумаг дешевле 10 ₽ — 4 знака (6,4215)."""
+    return fmt_money(value, 2 if abs(value) >= 10 else 4)
+
+
+def fmt_bond_pct(value: Decimal) -> str:
+    """Цена облигации в % от номинала: «50,732 %» (2–3 знака)."""
+    digits = min(3, max(2, -value.normalize().as_tuple().exponent))
+    return f"{fmt_money(value, digits)}{NBSP}%"
+
+
 def fmt_input(value: Decimal | None) -> str:
     """Число для подстановки в поле ввода при правке: 250.000000 → «250», 298.5 → «298,5»."""
     if value is None:
