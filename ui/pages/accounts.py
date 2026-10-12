@@ -4,9 +4,12 @@
 сохранённым ценам (обновить их можно на странице «Портфель»).
 """
 
+from decimal import Decimal
+
 import streamlit as st
 
 from core.models import Account
+from core.structure import counted_cash
 from services.portfolio_service import AccountError
 from ui.app_state import get_service, set_flash, show_flash
 from ui.formatting import fmt_money, fmt_pct, fmt_signed_money, plural
@@ -58,7 +61,14 @@ st.title("Счета")
 st.caption("Брокерские счета и ИИС, которые собираются в общий портфель. Стоимость — по последним сохранённым ценам.")
 
 summaries = service.account_summaries()
-total = sum((s.value + s.cash for s in summaries), 0) or 1
+
+
+def counted(summary) -> Decimal:
+    """Стоимость счёта: бумаги + деньги; минус на счёте в стоимость не входит (как на «Портфеле»)."""
+    return summary.value + counted_cash(summary.cash)
+
+
+total = sum((counted(s) for s in summaries), Decimal("0"))
 
 cards = st.columns(min(3, len(summaries) + 1))
 for i, summary in enumerate(summaries):
@@ -66,9 +76,9 @@ for i, summary in enumerate(summaries):
     with cards[i % len(cards)].container(border=True):
         head, badge = st.columns([3, 1])
         head.subheader(account.name)
-        badge.caption(fmt_pct((summary.value + summary.cash) / total * 100, 1))
+        badge.caption(fmt_pct(counted(summary) / total * 100, 1) if total > 0 else "—")
         st.caption(f"{account.broker} · {TYPES.get(account.account_type, account.account_type)}")
-        st.metric("Стоимость", f"{fmt_money(summary.value + summary.cash)} ₽", label_visibility="collapsed")
+        st.metric("Стоимость", f"{fmt_money(counted(summary))} ₽", label_visibility="collapsed")
         a, b, c = st.columns(3)
         a.caption(f"Бумаг\n\n**{summary.securities}**")
         b.caption(f"Деньги\n\n**{fmt_signed_money(summary.cash) if summary.cash < 0 else fmt_money(summary.cash)} ₽**")

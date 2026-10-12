@@ -5,6 +5,7 @@
 """
 
 from dataclasses import replace
+from decimal import Decimal
 
 from core.models import Account, Instrument, Operation, OpType, Quote
 from storage.db import connect
@@ -58,10 +59,10 @@ class PostgresRepository:
     def list_securities(self) -> list[Instrument]:
         with connect() as conn:
             rows = conn.execute(
-                "SELECT ticker, name, isin, board, asset_class, face_value FROM securities ORDER BY ticker"
+                "SELECT ticker, name, isin, board, asset_class, face_value, sector FROM securities ORDER BY ticker"
             ).fetchall()
         return [
-            Instrument(ticker=r[0], name=r[1], isin=r[2], board=r[3], asset_class=r[4], face_value=r[5])
+            Instrument(ticker=r[0], name=r[1], isin=r[2], board=r[3], asset_class=r[4], face_value=r[5], sector=r[6])
             for r in rows
         ]
 
@@ -78,6 +79,10 @@ class PostgresRepository:
                 (instrument.ticker, instrument.name, instrument.isin, instrument.board,
                  instrument.asset_class, instrument.face_value),
             )
+
+    def set_sector(self, ticker: str, sector: str | None) -> None:
+        with connect() as conn:
+            conn.execute("UPDATE securities SET sector = %s WHERE ticker = %s", (sector, ticker))
 
     # --- Цены -------------------------------------------------------------
 
@@ -122,6 +127,23 @@ class PostgresRepository:
                 "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
                 (key, value),
             )
+
+    # --- Целевая структура ----------------------------------------------
+
+    def get_targets(self) -> dict[str, Decimal]:
+        with connect() as conn:
+            rows = conn.execute("SELECT asset_class, target_share FROM target_allocation").fetchall()
+        return {r[0]: r[1] for r in rows}
+
+    def save_targets(self, targets: dict[str, Decimal]) -> None:
+        # Один блок with — одна транзакция: либо записались все доли, либо ни одной
+        with connect() as conn:
+            conn.execute("DELETE FROM target_allocation")
+            for asset_class, share in targets.items():
+                conn.execute(
+                    "INSERT INTO target_allocation (asset_class, target_share) VALUES (%s, %s)",
+                    (asset_class, share),
+                )
 
     # --- Операции ---------------------------------------------------------
 

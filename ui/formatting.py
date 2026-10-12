@@ -112,3 +112,10 @@ def plural(n: int, one: str, few: str, many: str) -> str:
     else:
         word = many
     return f"{n}{NBSP}{word}"
+
+
+def fmt_pp(value: Decimal) -> str:
+    """Отклонение в процентных пунктах со знаком: «+20,0 п.п.» / «−3,5 п.п.» / «0,0 п.п.»."""
+    rounded = round(value, 1)
+    sign = "+" if rounded > 0 else ("−" if rounded < 0 else "")
+    return f"{sign}{fmt_money(abs(rounded), 1)}{NBSP}п.п."

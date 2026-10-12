@@ -14,6 +14,10 @@ from typing import Callable
 from core.calculations import calculate_positions, cash_balance
 from core.calculations import cash_flow
 from core.models import Account, Instrument, Operation, OpType, Position, Quote
+from core.structure import (
+    SECTORS, TARGET_CLASSES, Slice, TargetRow, breakdown, check_targets, class_values,
+    counted_cash, over_threshold, rebalance, sector_values,
+)
 from core.validation import OversellError, check_can_delete, check_can_save
 from core.valuation import PortfolioTotals, PositionValue, portfolio_totals, value_positions
 from market.price_provider import MarketDataError, PriceProvider
@@ -30,6 +34,10 @@ QUOTES_FETCHED_AT_KEY = "quotes_fetched_at"
 RETRY_AFTER_FAILURE = timedelta(minutes=2)
 QUOTES_FAILED_AT_KEY = "quotes_failed_at"
 
+# Порог отклонения от целевой структуры, п.п. (значение по умолчанию — в db/schema.sql)
+THRESHOLD_KEY = "deviation_threshold_pp"
+DEFAULT_THRESHOLD = Decimal("5")
+
 
 @dataclass(frozen=True)
 class PortfolioView:
@@ -40,11 +48,27 @@ class PortfolioView:
     fetched_at: datetime | None  # когда последний раз получали цены с биржи
     warning: str | None          # например, «нет связи с Мосбиржей»
     cash: Decimal = Decimal("0")  # деньги на счёте/счетах; может быть < 0, если пополнения не вносились
+    # Деньги, которые входят в стоимость: минус на одном счёте не «съедает» деньги другого
+    cash_counted: Decimal = Decimal("0")
 
     @property
     def total_value(self) -> Decimal:
-        """Стоимость бумаг + деньги."""
-        return self.totals.value + self.cash
+        """Стоимость портфеля: бумаги с ценой + деньги (отрицательный остаток не входит)."""
+        return self.totals.value + self.cash_counted
+
+
+@dataclass(frozen=True)
+class Overview:
+    """Всё, что нужно главной странице «Обзор»."""
+
+    portfolio: PortfolioView
+    by_class: list[Slice]      # акции / облигации / фонды / деньги
+    by_sector: list[Slice]     # сектора акций + облигации и фонды одной группой
+    by_account: list[Slice]    # подпись — название счёта
+    targets: list[TargetRow]   # пусто, если цели не заданы
+    alerts: list[TargetRow]    # классы с отклонением больше порога
+    threshold: Decimal
+    share_sectors: dict[str, str | None]  # акции в портфеле → их сектор (для таблицы секторов)
 
 
 @dataclass(frozen=True)
@@ -60,6 +84,14 @@ class AccountSummary:
 
 class AccountError(ValueError):
     """Нельзя создать, изменить или удалить счёт. Текст — понятное объяснение."""
+
+
+class TargetsError(ValueError):
+    """Целевые доли или порог заданы неверно. errors — все ошибки сразу."""
+
+    def __init__(self, errors: list[str]):
+        super().__init__(" ".join(errors))
+        self.errors = errors
 
 
 class OperationNotFound(LookupError):
@@ -126,6 +158,15 @@ class PortfolioService:
                 cash=cash_balance(own),
             ))
         return result
+
+    def _counted_cash(self, operations: list[Operation], account_id: int | None) -> Decimal:
+        """Деньги для стоимости портфеля: по каждому счёту отдельно, минус считается как 0."""
+        if account_id is not None:
+            return counted_cash(cash_balance(operations, account_id=account_id))
+        return sum(
+            (counted_cash(cash_balance(operations, account_id=a.id)) for a in self._repo.list_accounts()),
+            Decimal("0"),
+        )
 
     def _check_account(self, name: str, broker: str, account_type: str, account_id: int | None = None):
         name, broker = (name or "").strip(), (broker or "").strip()
@@ -228,10 +269,77 @@ class PortfolioService:
         without_price = [v.position.ticker for v in values if v.price is None]
         if without_price and warning is None:
             warning = "Нет цены для: " + ", ".join(without_price) + ". Эти бумаги не входят в стоимость портфеля."
+        operations = self._repo.list_operations()
         return PortfolioView(
             values, portfolio_totals(values), self._fetched_at(), warning,
-            cash=cash_balance(self._repo.list_operations(), account_id=account_id),
+            cash=cash_balance(operations, account_id=account_id),
+            cash_counted=self._counted_cash(operations, account_id),
         )
+
+    # --- Структура и цели (этап 4) ---------------------------------------
+
+    def get_overview(self, refresh: bool = False) -> Overview:
+        """Главная страница: итоги, структура по классам/секторам/счетам, отклонения от целей.
+
+        Цены обновляются так же, как на странице «Портфель» (раз в 15 минут или по кнопке).
+        """
+        view = self.get_portfolio(refresh=refresh)
+        instruments = {s.ticker: s for s in self._repo.list_securities()}
+        classes = {t: i.asset_class for t, i in instruments.items()}
+        sectors = {t: i.sector for t, i in instruments.items()}
+        by_class_values = class_values(view.positions, classes, view.cash_counted)
+
+        rows = rebalance(by_class_values, self.get_targets())
+        threshold = self.get_threshold()
+        return Overview(
+            portfolio=view,
+            by_class=breakdown(by_class_values),
+            by_sector=breakdown(sector_values(view.positions, classes, sectors)),
+            by_account=breakdown(self._account_values(instruments)),
+            targets=rows,
+            alerts=over_threshold(rows, threshold),
+            threshold=threshold,
+            share_sectors={
+                v.position.ticker: sectors.get(v.position.ticker)
+                for v in view.positions if classes.get(v.position.ticker) == "share"
+            },
+        )
+
+    def _account_values(self, instruments: dict[str, Instrument]) -> dict[str, Decimal]:
+        """Название счёта → бумаги по сохранённым ценам + деньги (минус как 0)."""
+        operations = self._repo.list_operations()
+        result = {}
+        for account in self._repo.list_accounts():
+            positions = calculate_positions(operations, account_id=account.id)
+            values = value_positions(positions, self._repo.latest_quotes([p.ticker for p in positions]), instruments)
+            result[account.name] = portfolio_totals(values).value + self._counted_cash(operations, account.id)
+        return result
+
+    def get_targets(self) -> dict[str, Decimal]:
+        """Целевые доли классов, %. Пустой словарь — цели ещё не заданы."""
+        return self._repo.get_targets()
+
+    def get_threshold(self) -> Decimal:
+        """Порог предупреждения об отклонении, п.п."""
+        value = self._repo.get_setting(THRESHOLD_KEY)
+        return Decimal(value) if value else DEFAULT_THRESHOLD
+
+    def save_targets(self, targets: dict[str, Decimal], threshold: Decimal) -> None:
+        """Сохраняет целевые доли и порог. Ошибки → TargetsError со всеми сообщениями сразу."""
+        targets = {c: targets.get(c, Decimal("0")) for c in TARGET_CLASSES}
+        errors = check_targets(targets)
+        if not Decimal("0") < threshold <= Decimal("100"):
+            errors.append("Порог должен быть больше 0 и не больше 100 п.п.")
+        if errors:
+            raise TargetsError(errors)
+        self._repo.save_targets(targets)
+        self._repo.set_setting(THRESHOLD_KEY, f"{threshold.normalize():f}")
+
+    def set_sector(self, ticker: str, sector: str | None) -> None:
+        """Сектор акции; None — «не указан»."""
+        if sector is not None and sector not in SECTORS:
+            raise ValueError(f"Неизвестный сектор: {sector}")
+        self._repo.set_sector(ticker, sector)
 
     def refresh_prices(self, tickers: list[str]) -> None:
         """Запрашивает цены с биржи и сохраняет их. Ошибка сети → MarketDataError."""
@@ -334,6 +442,6 @@ def _find(operations: list[Operation], operation_id: int | None) -> Operation:
 
 
 __all__ = [
-    "AccountError", "AccountSummary", "MarketDataError", "OperationNotFound",
-    "OversellError", "PortfolioService", "PortfolioView",
+    "AccountError", "AccountSummary", "MarketDataError", "OperationNotFound", "Overview",
+    "OversellError", "PortfolioService", "PortfolioView", "TargetsError",
 ]

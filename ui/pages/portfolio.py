@@ -1,7 +1,6 @@
 """Страница «Портфель»: позиции с текущими ценами Мосбиржи, стоимость и доходность."""
 
 from datetime import datetime
-from decimal import Decimal
 
 import pandas as pd
 import streamlit as st
@@ -13,6 +12,7 @@ from ui.formatting import (
     fmt_signed_money, fmt_signed_pct,
 )
 from ui.pages_registry import NEW_OPERATION
+from ui.widgets import show_totals
 
 GAIN = "#13804B"
 LOSS = "#C23A2B"
@@ -57,22 +57,8 @@ elif view.fetched_at and datetime.now() - view.fetched_at > QUOTES_MAX_AGE:
 
 # --- Плашки с итогами (как в макете) -------------------------------------
 totals = view.totals
-cash_counted = max(view.cash, Decimal("0"))  # отрицательный остаток в стоимость не входит
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Стоимость портфеля", f"{fmt_money(totals.value + cash_counted)} ₽", border=True,
-          help="Бумаги по текущим ценам + свободные деньги")
-c2.metric("Вложено в бумаги", f"{fmt_money(totals.cost)} ₽", border=True)
-if totals.pnl_pct is not None and view.positions:
-    # Streamlit красит стрелку по обычному знаку «-» в начале delta: «-» — красная вниз, иначе зелёная вверх
-    delta = ("-" if totals.pnl < 0 else "+") + fmt_pct(abs(totals.pnl_pct))
-    c3.metric("Доходность бумаг", f"{fmt_signed_money(totals.pnl)} ₽", delta=delta, border=True)
-else:
-    c3.metric("Доходность бумаг", "—", border=True)
-c4.metric("Свободные деньги", f"{fmt_signed_money(view.cash) if view.cash < 0 else fmt_money(view.cash)} ₽",
-          border=True)
-if view.cash < 0:
-    st.caption(":orange[Деньги на счёте ушли в минус: покупки внесены, а пополнения — нет. "
-               "Внесите пополнения, чтобы видеть реальный остаток.]")
+cash_counted = view.cash_counted  # отрицательный остаток счёта в стоимость не входит
+show_totals(view)
 
 # --- Таблица позиций ------------------------------------------------------
 names = service.security_names()
@@ -119,13 +105,13 @@ empty = {key: "" for key in rows[0]} if rows else {}
 if view.cash != 0:
     rows.append(empty | {
         "Бумага": "Деньги", "Название": "рубли на счетах",
-        "Стоимость, ₽": fmt_signed_money(view.cash) if view.cash < 0 else fmt_money(view.cash),
-        "Доля": share(cash_counted) if view.cash > 0 else "—",
+        "Стоимость, ₽": fmt_money(cash_counted) if cash_counted > 0 else fmt_signed_money(view.cash),
+        "Доля": share(cash_counted) if cash_counted > 0 else "—",
     })
 if view.positions:
     rows.append(empty | {
         "Бумага": "Итого",
-        "Стоимость, ₽": fmt_money(totals.value + cash_counted),
+        "Стоимость, ₽": fmt_money(view.total_value),
         "Доходность, ₽": fmt_signed_money(totals.pnl),
         "Доходность, %": fmt_signed_pct(totals.pnl_pct) if totals.pnl_pct is not None else "—",
         "НКД, ₽": fmt_money(sum(v.accrued for v in view.positions if v.accrued is not None))

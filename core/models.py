@@ -78,6 +78,7 @@ class Instrument:
     board: str | None = None        # режим торгов MOEX: TQBR (акции), TQTF (фонды), TQOB/TQCB (облигации)
     asset_class: str | None = None  # "share", "etf", "bond"
     face_value: Decimal | None = None  # номинал облигации, ₽
+    sector: str | None = None       # сектор акции («Финансы»); задаётся вручную, биржа его не присылает
 
     @property
     def is_bond(self) -> bool:
