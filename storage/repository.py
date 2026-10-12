@@ -5,6 +5,7 @@
 а в будущем — заменить базу, не трогая остальной код.
 """
 
+from decimal import Decimal
 from typing import Protocol
 
 from core.models import Account, Instrument, Operation, Quote
@@ -34,7 +35,10 @@ class Repository(Protocol):
         """Все бумаги справочника (у части могут быть не заполнены название и режим торгов)."""
 
     def update_security(self, instrument: Instrument) -> None:
-        """Записывает название, ISIN, режим торгов и класс актива для тикера."""
+        """Записывает название, ISIN, режим торгов и класс актива для тикера (сектор не трогает)."""
+
+    def set_sector(self, ticker: str, sector: str | None) -> None:
+        """Сектор бумаги (None — «не указан»)."""
 
     # Цены
     def save_quotes(self, quotes: list[Quote]) -> None:
@@ -49,6 +53,13 @@ class Repository(Protocol):
 
     def set_setting(self, key: str, value: str) -> None:
         """Сохраняет настройку."""
+
+    # Целевая структура
+    def get_targets(self) -> dict[str, Decimal]:
+        """Целевые доли классов активов, %: {"share": 50, ...}. Пусто — цели не заданы."""
+
+    def save_targets(self, targets: dict[str, Decimal]) -> None:
+        """Заменяет все целевые доли новыми."""
 
     # Операции
     def list_operations(self) -> list[Operation]:

@@ -19,6 +19,7 @@ class InMemoryRepository:
         self.operations: dict[int, Operation] = {}
         self.quotes: list[Quote] = []
         self.settings: dict[str, str] = {}
+        self.targets: dict = {}
         self._next_id = 1
 
     # Счета
@@ -45,7 +46,18 @@ class InMemoryRepository:
         return list(self.securities.values())
 
     def update_security(self, instrument):
-        self.securities[instrument.ticker] = instrument
+        old = self.securities.get(instrument.ticker)  # сектор не перезаписываем, как в PostgreSQL
+        self.securities[instrument.ticker] = replace(instrument, sector=old.sector if old else instrument.sector)
+
+    def set_sector(self, ticker, sector):
+        self.securities[ticker] = replace(self.securities[ticker], sector=sector)
+
+    # Цели
+    def get_targets(self):
+        return dict(self.targets)
+
+    def save_targets(self, targets):
+        self.targets = dict(targets)
 
     # Цены
     def save_quotes(self, quotes):
