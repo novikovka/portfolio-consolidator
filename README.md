@@ -13,7 +13,7 @@
 ## Стек
 
 Python · Streamlit · PostgreSQL (psycopg) · pandas · requests · MOEX ISS API · pytest
-Разработка: Windows 10. Сервер: Raspberry Pi 5.
+Разработка: Windows 10. Сервер: Raspberry Pi 5 (приложение и база — в Docker).
 
 ## Этапы
 
@@ -46,3 +46,11 @@ streamlit run app.py            # откроется http://localhost:8501
 streamlit run app.py
 ```
 База запускается сама вместе с Docker Desktop. Проверить: `docker compose ps`.
+
+## Сервер (Raspberry Pi 5)
+
+На сервере приложение тоже работает в Docker и само поднимается после перезагрузки:
+```bash
+docker compose --profile app up -d --build   # база + приложение, http://<адрес Pi>:8501
+```
+Пошаговая установка, перенос данных, бэкапы и обновление — [deploy/RASPBERRY_PI.md](deploy/RASPBERRY_PI.md).

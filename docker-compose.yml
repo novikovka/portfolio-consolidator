@@ -1,6 +1,11 @@
-# База данных PostgreSQL для приложения.
-# Запуск:     docker compose up -d
-# Состояние:  docker compose ps
+# База данных PostgreSQL и (на сервере) само приложение.
+#
+# На компьютере для разработки — только база, приложение запускается из PyCharm/терминала:
+#   docker compose up -d
+# На сервере (Raspberry Pi) — база + приложение в контейнере, с автозапуском:
+#   docker compose --profile app up -d --build
+#
+# Состояние:  docker compose ps          Логи приложения: docker compose logs app
 # Остановка:  docker compose stop
 #
 # Имя базы, пользователь, пароль и порт берутся из файла .env
@@ -17,7 +22,8 @@ services:
       POSTGRES_USER: "${DB_USER:?not set - create .env with: copy .env.example .env}"
       POSTGRES_PASSWORD: "${DB_PASSWORD:?not set - create .env with: copy .env.example .env}"
     ports:
-      - "${DB_PORT:-5432}:5432"    # база доступна приложению на localhost
+      # 127.0.0.1 — база видна только с этой же машины, а не всей домашней сети
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data   # данные живут в томе и не пропадают
     healthcheck:                   # Docker сам проверяет, что база готова
@@ -25,6 +31,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  app:
+    build: .
+    container_name: portfolio-app
+    profiles: ["app"]              # запускается только с флагом --profile app (на сервере)
+    restart: unless-stopped        # сам поднимается после перезагрузки и после падения
+    env_file: .env                 # имя базы, пользователь и пароль — те же, что у базы
+    environment:
+      DB_HOST: db                  # внутри Docker база доступна по имени сервиса,
+      DB_PORT: "5432"              # а не через localhost
+    ports:
+      - "${APP_PORT:-8501}:8501"   # приложение доступно в домашней сети: http://<адрес>:8501
+    depends_on:
+      db:
+        condition: service_healthy # ждём, пока база будет готова
 
 volumes:
   pgdata:

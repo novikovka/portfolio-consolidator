@@ -1,0 +1,13 @@
+# Что НЕ попадает в образ приложения
+.env
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+backups/
+*.dump
+.vscode/
+.idea/
