@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Скрипты для Raspberry Pi всегда с переводами строк Linux (LF), даже если правились на Windows
+*.sh text eol=lf
